@@ -104,6 +104,16 @@ void main() {
       expect(note.isDone, isFalse);
     });
 
+    test('isArchived defaults to false', () {
+      final note = Note(title: 'Test', description: '');
+      expect(note.isArchived, isFalse);
+    });
+
+    test('isArchived can be set to true', () {
+      final note = Note(title: 'Test', description: '', isArchived: true);
+      expect(note.isArchived, isTrue);
+    });
+
     test('id is auto-generated when not provided', () {
       final n1 = Note(title: 'A', description: '');
       final n2 = Note(title: 'B', description: '');

@@ -24,13 +24,14 @@ class NoteAdapter extends TypeAdapter<Note> {
       createdAt: fields[4] as DateTime,
       timeAlert: fields[5] as TimeAlert?,
       locationAlert: fields[6] as LocationAlert?,
+      isArchived: fields[7] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, Note obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +45,9 @@ class NoteAdapter extends TypeAdapter<Note> {
       ..writeByte(5)
       ..write(obj.timeAlert)
       ..writeByte(6)
-      ..write(obj.locationAlert);
+      ..write(obj.locationAlert)
+      ..writeByte(7)
+      ..write(obj.isArchived);
   }
 
   @override

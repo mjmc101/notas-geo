@@ -8,6 +8,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback onToggleDone;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onArchive;
 
   const NoteCard({
     super.key,
@@ -15,6 +16,7 @@ class NoteCard extends StatelessWidget {
     required this.onToggleDone,
     required this.onEdit,
     required this.onDelete,
+    this.onArchive,
   });
 
   @override
@@ -63,6 +65,15 @@ class NoteCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (done && onArchive != null)
+                    IconButton(
+                      icon: const Icon(Icons.archive_outlined,
+                          color: AppTheme.accent, size: 20),
+                      tooltip: 'Arquivar',
+                      onPressed: onArchive,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert,
                         color: AppTheme.textSecondary, size: 20),
@@ -77,6 +88,17 @@ class NoteCard extends StatelessWidget {
                               style: TextStyle(color: AppTheme.textPrimary)),
                         ]),
                       ),
+                      if (done && onArchive != null)
+                        const PopupMenuItem(
+                          value: 'archive',
+                          child: Row(children: [
+                            Icon(Icons.archive_outlined,
+                                color: AppTheme.accent, size: 18),
+                            SizedBox(width: 8),
+                            Text('Arquivar',
+                                style: TextStyle(color: AppTheme.textPrimary)),
+                          ]),
+                        ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(children: [
@@ -89,6 +111,7 @@ class NoteCard extends StatelessWidget {
                     ],
                     onSelected: (v) {
                       if (v == 'edit') onEdit();
+                      if (v == 'archive') onArchive?.call();
                       if (v == 'delete') onDelete();
                     },
                   ),

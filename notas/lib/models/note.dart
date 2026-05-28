@@ -26,11 +26,15 @@ class Note extends HiveObject {
   @HiveField(6)
   LocationAlert? locationAlert;
 
+  @HiveField(7)
+  bool isArchived;
+
   Note({
     String? id,
     required this.title,
     required this.description,
     this.isDone = false,
+    this.isArchived = false,
     DateTime? createdAt,
     this.timeAlert,
     this.locationAlert,

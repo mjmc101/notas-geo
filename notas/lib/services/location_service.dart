@@ -11,7 +11,6 @@ class LocationService {
   LocationService._();
 
   StreamSubscription<Position>? _subscription;
-  Timer? _fallbackTimer;
   final Map<String, bool> _triggered = {};
   bool _isRunning = false;
 
@@ -52,11 +51,11 @@ class LocationService {
 
     _isRunning = true;
 
-    // No distance filter – deliver updates on time basis so stationary users
-    // are also checked. A pure distance filter would never fire if the user
-    // stands still.
+    // distanceFilter:0 so updates arrive on time alone, not distance.
+    // Accuracy.medium (balanced power) is sufficient for geofencing;
+    // high accuracy is reserved for the one-shot checkNow() calls.
     final settings = AndroidSettings(
-      accuracy: LocationAccuracy.high,
+      accuracy: LocationAccuracy.medium,
       distanceFilter: 0,
       intervalDuration: const Duration(seconds: 15),
       foregroundNotificationConfig: const ForegroundNotificationConfig(
@@ -70,20 +69,13 @@ class LocationService {
     _subscription = Geolocator.getPositionStream(locationSettings: settings)
         .listen(_onPosition, onError: (_) => _isRunning = false);
 
-    // Fallback timer: fire even if the OS throttles the stream.
-    _fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      checkNow();
-    });
-
-    // Immediate check without waiting for first stream event.
+    // Immediate high-accuracy check without waiting for first stream event.
     unawaited(checkNow());
   }
 
   void stopMonitoring() {
     _subscription?.cancel();
     _subscription = null;
-    _fallbackTimer?.cancel();
-    _fallbackTimer = null;
     _isRunning = false;
   }
 

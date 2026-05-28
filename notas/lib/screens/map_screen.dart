@@ -18,7 +18,7 @@ class _MapScreenState extends State<MapScreen> {
   final _mapController = MapController();
 
   List<Note> get _locationNotes => HiveService.getAllNotes()
-      .where((n) => !n.isDone && n.locationAlert != null)
+      .where((n) => !n.isDone && !n.isArchived && n.locationAlert != null)
       .toList();
 
   Future<void> _centerOnMe() async {
