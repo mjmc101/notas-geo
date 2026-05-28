@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'hive_service.dart';
+import 'location_config.dart';
 import 'notification_service.dart';
 import 'restriction_checker.dart';
 
@@ -51,13 +52,10 @@ class LocationService {
 
     _isRunning = true;
 
-    // distanceFilter:0 so updates arrive on time alone, not distance.
-    // Accuracy.medium (balanced power) is sufficient for geofencing;
-    // high accuracy is reserved for the one-shot checkNow() calls.
     final settings = AndroidSettings(
-      accuracy: LocationAccuracy.medium,
+      accuracy: LocationAccuracy.values[LocationConfig.streamAccuracyLevel],
       distanceFilter: 0,
-      intervalDuration: const Duration(seconds: 15),
+      intervalDuration: LocationConfig.streamInterval,
       foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationTitle: 'Notas & Avisos',
         notificationText: 'A monitorizar a sua localização em segundo plano',
@@ -89,9 +87,9 @@ class LocationService {
     if (!_isRunning) return;
     try {
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.values[LocationConfig.checkNowAccuracyLevel],
+          timeLimit: LocationConfig.checkNowTimeout,
         ),
       );
       _onPosition(pos);
@@ -119,7 +117,7 @@ class LocationService {
 
         _triggered[note.id] = true;
         NotificationService.sendLocationAlert(note);
-      } else if (dist > loc.radiusMeters * 1.5) {
+      } else if (dist > loc.radiusMeters * LocationConfig.triggerResetMultiplier) {
         // Reset trigger when user moves clearly outside the zone so they
         // get a notification again on re-entry.
         _triggered.remove(note.id);
