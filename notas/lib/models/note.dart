@@ -71,19 +71,28 @@ class LocationAlert {
   @HiveField(3)
   String? locationName;
 
-  // Only trigger when location is reached during this time window
-  @HiveField(4)
-  TimeAlert? timeRestriction;
+  // Field 4 was TimeAlert? timeRestriction - replaced by time window fields below
 
   @HiveField(5)
   bool triggered;
+
+  // Minutes from midnight (e.g. 9*60=540 for 09:00)
+  @HiveField(6)
+  int? timeWindowStartMinutes;
+
+  @HiveField(7)
+  int? timeWindowEndMinutes;
 
   LocationAlert({
     required this.latitude,
     required this.longitude,
     required this.radiusMeters,
     this.locationName,
-    this.timeRestriction,
     this.triggered = false,
+    this.timeWindowStartMinutes,
+    this.timeWindowEndMinutes,
   });
+
+  bool get hasTimeWindow =>
+      timeWindowStartMinutes != null && timeWindowEndMinutes != null;
 }

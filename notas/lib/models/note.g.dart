@@ -113,15 +113,16 @@ class LocationAlertAdapter extends TypeAdapter<LocationAlert> {
       longitude: fields[1] as double,
       radiusMeters: fields[2] as double,
       locationName: fields[3] as String?,
-      timeRestriction: fields[4] as TimeAlert?,
       triggered: fields[5] as bool? ?? false,
+      timeWindowStartMinutes: fields[6] as int?,
+      timeWindowEndMinutes: fields[7] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, LocationAlert obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.latitude)
       ..writeByte(1)
@@ -130,10 +131,12 @@ class LocationAlertAdapter extends TypeAdapter<LocationAlert> {
       ..write(obj.radiusMeters)
       ..writeByte(3)
       ..write(obj.locationName)
-      ..writeByte(4)
-      ..write(obj.timeRestriction)
       ..writeByte(5)
-      ..write(obj.triggered);
+      ..write(obj.triggered)
+      ..writeByte(6)
+      ..write(obj.timeWindowStartMinutes)
+      ..writeByte(7)
+      ..write(obj.timeWindowEndMinutes);
   }
 
   @override

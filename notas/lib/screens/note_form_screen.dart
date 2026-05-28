@@ -32,6 +32,8 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   double _locRadius = 200;
 
   bool _hasCombined = false;
+  TimeOfDay? _combinedStartTime;
+  TimeOfDay? _combinedEndTime;
 
   @override
   void initState() {
@@ -57,12 +59,16 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
       _locRadius = loc.radiusMeters;
       _locNameCtrl.text = loc.locationName ?? '';
 
-      if (loc.timeRestriction != null) {
+      if (loc.hasTimeWindow) {
         _hasCombined = true;
-        _hasTimeAlert = false;
-        _alertDt = loc.timeRestriction!.dateTime;
-        _isRecurring = loc.timeRestriction!.isRecurring;
-        _recurringType = loc.timeRestriction!.recurringType ?? 'daily';
+        _combinedStartTime = TimeOfDay(
+          hour: loc.timeWindowStartMinutes! ~/ 60,
+          minute: loc.timeWindowStartMinutes! % 60,
+        );
+        _combinedEndTime = TimeOfDay(
+          hour: loc.timeWindowEndMinutes! ~/ 60,
+          minute: loc.timeWindowEndMinutes! % 60,
+        );
       }
     }
   }
@@ -117,6 +123,36 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     });
   }
 
+  Future<void> _pickCombinedTime(bool isStart) async {
+    final initial = isStart
+        ? (_combinedStartTime ?? const TimeOfDay(hour: 9, minute: 0))
+        : (_combinedEndTime ?? const TimeOfDay(hour: 18, minute: 0));
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppTheme.accent,
+            surface: AppTheme.surface,
+            onSurface: AppTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (isStart) {
+        _combinedStartTime = picked;
+      } else {
+        _combinedEndTime = picked;
+      }
+    });
+  }
+
   Future<void> _pickLocation() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -143,14 +179,13 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     TimeAlert? timeAlert;
     LocationAlert? locationAlert;
 
-    if (_hasTimeAlert && !_hasCombined) {
+    if (_hasTimeAlert) {
       if (_alertDt == null && !_isRecurring) {
         _showSnack('Escolha uma data/hora para o aviso');
         return;
       }
       timeAlert = TimeAlert(
-        dateTime:
-            _alertDt ?? DateTime.now().add(const Duration(hours: 1)),
+        dateTime: _alertDt ?? DateTime.now().add(const Duration(hours: 1)),
         isRecurring: _isRecurring,
         recurringType: _isRecurring ? _recurringType : null,
       );
@@ -161,18 +196,16 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
         _showSnack('Escolha um ponto no mapa');
         return;
       }
-      TimeAlert? timeRestriction;
+      int? startMinutes;
+      int? endMinutes;
       if (_hasCombined) {
-        if (_alertDt == null && !_isRecurring) {
-          _showSnack('Escolha uma data/hora para a restrição');
+        if (_combinedStartTime == null || _combinedEndTime == null) {
+          _showSnack('Escolha as horas de início e fim do intervalo');
           return;
         }
-        timeRestriction = TimeAlert(
-          dateTime:
-              _alertDt ?? DateTime.now().add(const Duration(hours: 1)),
-          isRecurring: _isRecurring,
-          recurringType: _isRecurring ? _recurringType : null,
-        );
+        startMinutes =
+            _combinedStartTime!.hour * 60 + _combinedStartTime!.minute;
+        endMinutes = _combinedEndTime!.hour * 60 + _combinedEndTime!.minute;
       }
       locationAlert = LocationAlert(
         latitude: _locLat!,
@@ -181,8 +214,9 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
         locationName: _locNameCtrl.text.trim().isEmpty
             ? null
             : _locNameCtrl.text.trim(),
-        timeRestriction: timeRestriction,
         triggered: false,
+        timeWindowStartMinutes: startMinutes,
+        timeWindowEndMinutes: endMinutes,
       );
     }
 
@@ -265,10 +299,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
               icon: Icons.alarm,
               title: 'Aviso por Hora',
               enabled: _hasTimeAlert,
-              onToggle: (v) => setState(() {
-                _hasTimeAlert = v;
-                if (v) _hasCombined = false;
-              }),
+              onToggle: (v) => setState(() => _hasTimeAlert = v),
             ),
             if (_hasTimeAlert) ...[
               const SizedBox(height: 10),
@@ -303,19 +334,12 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
                 locRadius: _locRadius,
                 locNameCtrl: _locNameCtrl,
                 hasCombined: _hasCombined,
-                alertDt: _alertDt,
-                isRecurring: _isRecurring,
-                recurringType: _recurringType,
+                combinedStartTime: _combinedStartTime,
+                combinedEndTime: _combinedEndTime,
                 onPickLocation: _pickLocation,
-                onToggleCombined: (v) => setState(() {
-                  _hasCombined = v;
-                  if (v) _hasTimeAlert = false;
-                }),
-                onPickDt: _pickDateTime,
-                onToggleRecurring: (v) =>
-                    setState(() => _isRecurring = v),
-                onChangeRecurringType: (v) =>
-                    setState(() => _recurringType = v!),
+                onToggleCombined: (v) => setState(() => _hasCombined = v),
+                onPickStartTime: () => _pickCombinedTime(true),
+                onPickEndTime: () => _pickCombinedTime(false),
               ),
             ],
 
@@ -408,14 +432,12 @@ class _LocationAlertPanel extends StatelessWidget {
   final double locRadius;
   final TextEditingController locNameCtrl;
   final bool hasCombined;
-  final DateTime? alertDt;
-  final bool isRecurring;
-  final String recurringType;
+  final TimeOfDay? combinedStartTime;
+  final TimeOfDay? combinedEndTime;
   final VoidCallback onPickLocation;
   final ValueChanged<bool> onToggleCombined;
-  final VoidCallback onPickDt;
-  final ValueChanged<bool> onToggleRecurring;
-  final ValueChanged<String?> onChangeRecurringType;
+  final VoidCallback onPickStartTime;
+  final VoidCallback onPickEndTime;
 
   const _LocationAlertPanel({
     required this.locLat,
@@ -423,15 +445,22 @@ class _LocationAlertPanel extends StatelessWidget {
     required this.locRadius,
     required this.locNameCtrl,
     required this.hasCombined,
-    required this.alertDt,
-    required this.isRecurring,
-    required this.recurringType,
+    required this.combinedStartTime,
+    required this.combinedEndTime,
     required this.onPickLocation,
     required this.onToggleCombined,
-    required this.onPickDt,
-    required this.onToggleRecurring,
-    required this.onChangeRecurringType,
+    required this.onPickStartTime,
+    required this.onPickEndTime,
   });
+
+  String _fmt(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  bool get _isOvernight =>
+      combinedStartTime != null &&
+      combinedEndTime != null &&
+      (combinedStartTime!.hour * 60 + combinedStartTime!.minute) >
+          (combinedEndTime!.hour * 60 + combinedEndTime!.minute);
 
   @override
   Widget build(BuildContext context) {
@@ -496,10 +525,10 @@ class _LocationAlertPanel extends StatelessWidget {
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Combinar com hora',
+              title: const Text('Combinar com intervalo de horas',
                   style: TextStyle(color: AppTheme.textPrimary)),
               subtitle: const Text(
-                'Avisar só quando chega ao local numa janela de tempo',
+                'Avisar só quando chega ao local dentro de um intervalo de horas',
                 style: TextStyle(
                     color: AppTheme.textSecondary, fontSize: 12),
               ),
@@ -508,21 +537,48 @@ class _LocationAlertPanel extends StatelessWidget {
             ),
             if (hasCombined) ...[
               const SizedBox(height: 8),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Recorrente',
-                    style: TextStyle(color: AppTheme.textPrimary)),
-                value: isRecurring,
-                onChanged: onToggleRecurring,
+              Row(
+                children: [
+                  Expanded(
+                    child: _TimeButton(
+                      label: 'Início',
+                      time: combinedStartTime,
+                      onTap: onPickStartTime,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _TimeButton(
+                      label: 'Fim',
+                      time: combinedEndTime,
+                      onTap: onPickEndTime,
+                    ),
+                  ),
+                ],
               ),
-              if (isRecurring) ...[
+              if (combinedStartTime != null && combinedEndTime != null) ...[
                 const SizedBox(height: 8),
-                _RecurringDropdown(
-                    value: recurringType, onChanged: onChangeRecurringType),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AC8F060),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.schedule,
+                          color: AppTheme.accent, size: 15),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Avisar entre ${_fmt(combinedStartTime!)} e ${_fmt(combinedEndTime!)}${_isOvernight ? ' (passa meia-noite)' : ''}',
+                        style: const TextStyle(
+                            color: AppTheme.accent, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ],
-              const SizedBox(height: 8),
-              _DateTimeButton(dt: alertDt, onTap: onPickDt),
             ],
           ],
         ],
@@ -606,6 +662,65 @@ class _DateTimeButton extends StatelessWidget {
                 color:
                     dt != null ? AppTheme.textPrimary : AppTheme.textSecondary,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeButton extends StatelessWidget {
+  final String label;
+  final TimeOfDay? time;
+  final VoidCallback onTap;
+
+  const _TimeButton({
+    required this.label,
+    required this.time,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTime = time != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: hasTime ? AppTheme.accent : AppTheme.cardBorder),
+          color: hasTime ? const Color(0x1AC8F060) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.access_time,
+                    color: hasTime ? AppTheme.accent : AppTheme.textSecondary,
+                    size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  hasTime
+                      ? '${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}'
+                      : '--:--',
+                  style: TextStyle(
+                    color: hasTime
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

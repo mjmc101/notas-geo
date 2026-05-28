@@ -135,7 +135,7 @@ class NoteCard extends StatelessWidget {
                           label: note.locationAlert!.locationName ??
                               '${note.locationAlert!.radiusMeters.toInt()}m',
                         ),
-                      if (note.locationAlert?.timeRestriction != null)
+                      if (note.locationAlert?.hasTimeWindow == true)
                         const _Chip(icon: Icons.link, label: 'GPS+Hora'),
                     ],
                   ),

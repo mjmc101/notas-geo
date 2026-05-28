@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import '../models/note.dart';
 import 'hive_service.dart';
 import 'notification_service.dart';
 
@@ -72,8 +71,11 @@ class LocationService {
       if (dist <= loc.radiusMeters) {
         if (_triggered[note.id] == true) continue;
 
-        if (loc.timeRestriction != null) {
-          if (!_isInTimeWindow(loc.timeRestriction!, now)) continue;
+        if (loc.hasTimeWindow) {
+          if (!_isInTimeWindow(
+              loc.timeWindowStartMinutes!, loc.timeWindowEndMinutes!, now)) {
+            continue;
+          }
         }
 
         _triggered[note.id] = true;
@@ -84,20 +86,13 @@ class LocationService {
     }
   }
 
-  bool _isInTimeWindow(TimeAlert tr, DateTime now) {
-    if (!tr.isRecurring) {
-      return now.difference(tr.dateTime).inMinutes.abs() <= 30;
-    }
-    switch (tr.recurringType) {
-      case 'daily':
-        return now.hour == tr.dateTime.hour &&
-            (now.minute - tr.dateTime.minute).abs() <= 30;
-      case 'weekly':
-        return now.weekday == tr.dateTime.weekday &&
-            now.hour == tr.dateTime.hour &&
-            (now.minute - tr.dateTime.minute).abs() <= 30;
-      default:
-        return true;
+  bool _isInTimeWindow(int startMinutes, int endMinutes, DateTime now) {
+    final nowMinutes = now.hour * 60 + now.minute;
+    if (startMinutes <= endMinutes) {
+      return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+    } else {
+      // overnight range, e.g. 22:00–06:00
+      return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
     }
   }
 }

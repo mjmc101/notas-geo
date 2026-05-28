@@ -130,6 +130,15 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  String _fmtWindow(LocationAlert loc) {
+    String pad(int n) => n.toString().padLeft(2, '0');
+    final sh = loc.timeWindowStartMinutes! ~/ 60;
+    final sm = loc.timeWindowStartMinutes! % 60;
+    final eh = loc.timeWindowEndMinutes! ~/ 60;
+    final em = loc.timeWindowEndMinutes! % 60;
+    return '${pad(sh)}:${pad(sm)}–${pad(eh)}:${pad(em)}';
+  }
+
   void _showInfo(Note note) {
     showModalBottomSheet(
       context: context,
@@ -194,13 +203,16 @@ class _MapScreenState extends State<MapScreen> {
               Text('Raio: ${note.locationAlert!.radiusMeters.toInt()} m',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 13)),
-              if (note.locationAlert!.timeRestriction != null) ...[
+              if (note.locationAlert!.hasTimeWindow) ...[
                 const SizedBox(width: 12),
                 const Icon(Icons.schedule,
                     color: AppTheme.accent, size: 15),
                 const SizedBox(width: 4),
-                const Text('Restrito por hora',
-                    style: TextStyle(color: AppTheme.accent, fontSize: 13)),
+                Text(
+                  _fmtWindow(note.locationAlert!),
+                  style: const TextStyle(
+                      color: AppTheme.accent, fontSize: 13),
+                ),
               ],
             ]),
           ],
