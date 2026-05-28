@@ -56,7 +56,7 @@ Write-Host ""
 for ($remaining = $Minutes * 60; $remaining -gt 0; $remaining -= 15) {
     $mins = [math]::Floor($remaining / 60)
     $secs = $remaining % 60
-    Write-Host ("  {0:D2}:{1:D2} remaining..." -f $mins, $secs)
+    Write-Host ("  {0:00}:{1:00} remaining..." -f $mins, $secs)
     Start-Sleep -Seconds ([math]::Min(15, $remaining))
 }
 
