@@ -11,6 +11,7 @@ class LocationService {
   LocationService._();
 
   StreamSubscription<Position>? _subscription;
+  Timer? _fallbackTimer;
   final Map<String, bool> _triggered = {};
   bool _isRunning = false;
 
@@ -23,12 +24,21 @@ class LocationService {
     if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
     }
-    return perm != LocationPermission.denied &&
-        perm != LocationPermission.deniedForever;
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      return false;
+    }
+
+    // If only "while in use", try to upgrade to "always" for background use.
+    // On Android 11+, this redirects to app settings.
+    if (perm == LocationPermission.whileInUse) {
+      final bg = await Permission.locationAlways.status;
+      if (bg.isDenied) await Permission.locationAlways.request();
+    }
+
+    return true;
   }
 
-  /// Requests the system to exempt this app from battery optimisation so the
-  /// foreground location service is not killed when the screen is off.
   Future<void> requestBatteryOptimizationExemption() async {
     final status = await Permission.ignoreBatteryOptimizations.status;
     if (status.isDenied) {
@@ -41,29 +51,61 @@ class LocationService {
     if (!await requestPermissions()) return;
 
     _isRunning = true;
+
+    // No distance filter – deliver updates on time basis so stationary users
+    // are also checked. A pure distance filter would never fire if the user
+    // stands still.
     final settings = AndroidSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 15,
-      intervalDuration: Duration(seconds: 20),
-      foregroundNotificationConfig: ForegroundNotificationConfig(
-        notificationText: 'A monitorizar a sua localização em segundo plano',
+      distanceFilter: 0,
+      intervalDuration: const Duration(seconds: 15),
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationTitle: 'Notas & Avisos',
+        notificationText: 'A monitorizar a sua localização em segundo plano',
+        notificationChannelName: 'Location monitoring',
         enableWakeLock: true,
       ),
     );
 
     _subscription = Geolocator.getPositionStream(locationSettings: settings)
         .listen(_onPosition, onError: (_) => _isRunning = false);
+
+    // Fallback timer: fire even if the OS throttles the stream.
+    _fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      checkNow();
+    });
+
+    // Immediate check without waiting for first stream event.
+    unawaited(checkNow());
   }
 
   void stopMonitoring() {
     _subscription?.cancel();
     _subscription = null;
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
     _isRunning = false;
   }
 
   void resetTrigger(String noteId) {
     _triggered.remove(noteId);
+  }
+
+  /// Gets the current position once and runs the geofence check immediately.
+  /// Call this after saving a note or whenever an instant check is needed.
+  Future<void> checkNow() async {
+    if (!_isRunning) return;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      _onPosition(pos);
+    } catch (_) {
+      // Permission denied, GPS unavailable, or timeout — skip silently.
+    }
   }
 
   void _onPosition(Position pos) {
@@ -81,12 +123,13 @@ class LocationService {
 
       if (dist <= loc.radiusMeters) {
         if (_triggered[note.id] == true) continue;
-
         if (!RestrictionChecker.isWithinRestriction(loc, now)) continue;
 
         _triggered[note.id] = true;
         NotificationService.sendLocationAlert(note);
-      } else if (dist > loc.radiusMeters * 2.5) {
+      } else if (dist > loc.radiusMeters * 1.5) {
+        // Reset trigger when user moves clearly outside the zone so they
+        // get a notification again on re-entry.
         _triggered.remove(note.id);
       }
     }

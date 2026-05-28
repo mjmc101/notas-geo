@@ -42,6 +42,7 @@ class _NotasAppState extends State<NotasApp> {
     final hasLocNotes = notes.any((n) => !n.isDone && n.locationAlert != null);
     if (hasLocNotes) {
       await LocationService.instance.startMonitoring();
+      // checkNow() is already called inside startMonitoring()
     }
 
     for (final note in notes) {

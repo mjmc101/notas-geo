@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
@@ -310,6 +311,8 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     if (locationAlert != null) {
       LocationService.instance.resetTrigger(note.id);
       await LocationService.instance.startMonitoring();
+      // Immediate check: fire notification if already inside the radius.
+      unawaited(LocationService.instance.checkNow());
     }
 
     if (mounted) Navigator.pop(context, true);
