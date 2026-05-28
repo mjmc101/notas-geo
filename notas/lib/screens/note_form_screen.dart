@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../services/hive_service.dart';
 import '../services/notification_service.dart';
+import '../models/saved_place.dart';
 import '../services/location_service.dart';
+import '../services/places_service.dart';
 import '../theme.dart';
 import 'location_picker_screen.dart';
 
@@ -176,17 +178,51 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   }
 
   Future<void> _pickLocation() async {
+    final places = PlacesService.getAll();
+
+    final src = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _LocationSourceSheet(
+        places: places,
+        hasExistingLocation: _locLat != null,
+      ),
+    );
+
+    if (src == null || !mounted) return;
+
+    double? destLat;
+    double? destLng;
+
+    final type = src['type'] as String;
+    if (type == 'place') {
+      destLat = src['lat'] as double;
+      destLng = src['lng'] as double;
+      if (_locNameCtrl.text.trim().isEmpty) {
+        _locNameCtrl.text = src['name'] as String;
+      }
+    } else if (type == 'map') {
+      destLat = _locLat;
+      destLng = _locLng;
+    }
+    // type == 'gps': destLat/Lng stay null → picker fetches GPS automatically
+
+    if (!mounted) return;
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
         builder: (_) => LocationPickerScreen(
-          initialLat: _locLat,
-          initialLng: _locLng,
+          initialLat: destLat,
+          initialLng: destLng,
           initialRadius: _locRadius,
         ),
       ),
     );
-    if (result != null) {
+
+    if (result != null && mounted) {
       setState(() {
         _locLat = result['lat'] as double;
         _locLng = result['lng'] as double;
@@ -590,10 +626,10 @@ class _LocationAlertPanel extends StatelessWidget {
                     ? const BorderSide(color: AppTheme.accent)
                     : BorderSide.none,
               ),
-              icon: const Icon(Icons.map),
+              icon: const Icon(Icons.add_location_alt),
               label: Text(locLat != null
-                  ? 'Alterar ponto no mapa'
-                  : 'Escolher ponto no mapa'),
+                  ? 'Alterar localização'
+                  : 'Definir localização'),
               onPressed: onPickLocation,
             ),
           ),
@@ -1088,6 +1124,119 @@ class _DateTimeButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Location source selection sheet ──────────────────────────────────────────
+
+class _LocationSourceSheet extends StatelessWidget {
+  final List<SavedPlace> places;
+  final bool hasExistingLocation;
+
+  const _LocationSourceSheet({
+    required this.places,
+    required this.hasExistingLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 12),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppTheme.cardBorder,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Escolher localização',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.my_location, color: AppTheme.accent),
+          title: const Text('Minha localização',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Abrir mapa centrado na posição actual',
+              style:
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          onTap: () => Navigator.pop(context, {'type': 'gps'}),
+        ),
+        ListTile(
+          leading: const Icon(Icons.map, color: AppTheme.accent),
+          title: Text(
+            hasExistingLocation ? 'Alterar no mapa' : 'Escolher no mapa',
+            style: const TextStyle(color: AppTheme.textPrimary),
+          ),
+          subtitle: const Text('Toque num ponto para definir o local',
+              style:
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          onTap: () => Navigator.pop(context, {'type': 'map'}),
+        ),
+        if (places.isNotEmpty) ...[
+          const Divider(indent: 16, endIndent: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Row(
+              children: [
+                Icon(Icons.bookmark, color: AppTheme.accent, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'Locais guardados',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: places.length,
+              itemBuilder: (_, i) {
+                final p = places[i];
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.place,
+                      color: AppTheme.accent, size: 20),
+                  title: Text(p.name,
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary)),
+                  subtitle: Text(
+                    '${p.latitude.toStringAsFixed(4)}, '
+                    '${p.longitude.toStringAsFixed(4)}',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                  onTap: () => Navigator.pop(context, {
+                    'type': 'place',
+                    'lat': p.latitude,
+                    'lng': p.longitude,
+                    'name': p.name,
+                  }),
+                );
+              },
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
