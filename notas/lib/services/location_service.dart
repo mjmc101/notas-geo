@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'geofence_checker.dart';
 import 'hive_service.dart';
 import 'location_config.dart';
 import 'notification_service.dart';
-import 'restriction_checker.dart';
 
 class LocationService {
   static LocationService? _instance;
@@ -111,15 +111,19 @@ class LocationService {
         pos.latitude, pos.longitude, loc.latitude, loc.longitude,
       );
 
-      if (dist <= loc.radiusMeters) {
-        if (_triggered[note.id] == true) continue;
-        if (!RestrictionChecker.isWithinRestriction(loc, now)) continue;
-
+      if (GeofenceChecker.shouldFire(
+        distanceMeters: dist,
+        radiusMeters: loc.radiusMeters,
+        alreadyTriggered: _triggered[note.id] == true,
+        loc: loc,
+        now: now,
+      )) {
         _triggered[note.id] = true;
         NotificationService.sendLocationAlert(note);
-      } else if (dist > loc.radiusMeters * LocationConfig.triggerResetMultiplier) {
-        // Reset trigger when user moves clearly outside the zone so they
-        // get a notification again on re-entry.
+      } else if (GeofenceChecker.shouldReset(
+        distanceMeters: dist,
+        radiusMeters: loc.radiusMeters,
+      )) {
         _triggered.remove(note.id);
       }
     }

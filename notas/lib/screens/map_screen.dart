@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -74,15 +75,22 @@ class _MapScreenState extends State<MapScreen> {
                   n.locationAlert!.latitude, n.locationAlert!.longitude),
               width: 44,
               height: 44,
-              child: GestureDetector(
-                onTap: () => _showNoteInfo(n),
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: AppTheme.background,
-                    shape: BoxShape.circle,
+              child: Semantics(
+                label: 'Nota: ${n.title}',
+                button: true,
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    _showNoteInfo(n);
+                  },
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.location_pin,
+                        color: AppTheme.accent, size: 32),
                   ),
-                  child: Icon(Icons.location_pin,
-                      color: AppTheme.accent, size: 32),
                 ),
               ),
             ))
@@ -93,17 +101,24 @@ class _MapScreenState extends State<MapScreen> {
               point: LatLng(p.latitude, p.longitude),
               width: 38,
               height: 38,
-              child: GestureDetector(
-                onTap: () => _showPlaceInfo(p),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _kSavedColor,
-                    shape: BoxShape.circle,
-                    border:
-                        Border.all(color: AppTheme.background, width: 2),
+              child: Semantics(
+                label: 'Local guardado: ${p.name}',
+                button: true,
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    _showPlaceInfo(p);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _kSavedColor,
+                      shape: BoxShape.circle,
+                      border:
+                          Border.all(color: AppTheme.background, width: 2),
+                    ),
+                    child: const Icon(Icons.bookmark,
+                        color: AppTheme.background, size: 18),
                   ),
-                  child: const Icon(Icons.bookmark,
-                      color: AppTheme.background, size: 18),
                 ),
               ),
             ))

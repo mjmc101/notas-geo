@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../theme.dart';
@@ -34,23 +35,30 @@ class NoteCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: onToggleDone,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      margin: const EdgeInsets.only(right: 12, top: 2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: done ? AppTheme.accent : AppTheme.textSecondary,
-                          width: 2,
+                  Semantics(
+                    label: done ? 'Marcar como não concluída' : 'Marcar como concluída',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        onToggleDone();
+                      },
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        margin: const EdgeInsets.only(right: 12, top: 2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: done ? AppTheme.accent : AppTheme.textSecondary,
+                            width: 2,
+                          ),
+                          color: done ? AppTheme.accent : Colors.transparent,
                         ),
-                        color: done ? AppTheme.accent : Colors.transparent,
+                        child: done
+                            ? const Icon(Icons.check, size: 13, color: AppTheme.background)
+                            : null,
                       ),
-                      child: done
-                          ? const Icon(Icons.check, size: 13, color: AppTheme.background)
-                          : null,
                     ),
                   ),
                   Expanded(

@@ -36,6 +36,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

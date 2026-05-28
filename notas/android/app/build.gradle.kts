@@ -18,7 +18,7 @@ android {
         // minSdk 24: geolocator_android requires >= 24 (Flutter 3.44 also defaults to 24)
         val pinnedMinSdk = 24
         minSdk = pinnedMinSdk
-        targetSdk = 36
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

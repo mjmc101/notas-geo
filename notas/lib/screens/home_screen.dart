@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/note.dart';
 import '../services/hive_service.dart';
@@ -28,18 +29,24 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       floatingActionButton: _tab == 0
           ? FloatingActionButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NoteFormScreen()),
-              ).then((r) {
-                if (r == true) setState(() {});
-              }),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NoteFormScreen()),
+                ).then((r) {
+                  if (r == true) setState(() {});
+                });
+              },
               child: const Icon(Icons.add),
             )
           : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (i) {
+          HapticFeedback.selectionClick();
+          setState(() => _tab = i);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.notes_outlined),

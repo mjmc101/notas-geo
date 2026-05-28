@@ -80,11 +80,11 @@ function Show-Section($label, $lines) {
     }
 }
 
-$gpsLines     = $raw | Select-String "gps"               -i | ForEach-Object { $_.Line.Trim() }
-$wakeLines    = $raw | Select-String "wake_lock|wakelock" -i | ForEach-Object { $_.Line.Trim() }
-$cpuLines     = $raw | Select-String "cpu="              -i | Select-Object -First 6 | ForEach-Object { $_.Line.Trim() }
-$powerLines   = $raw | Select-String "power|mah"         -i | Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }
-$networkLines = $raw | Select-String "network"           -i | Select-Object -First 4 | ForEach-Object { $_.Line.Trim() }
+$gpsLines     = $raw | Select-String "gps"               | ForEach-Object { $_.Line.Trim() }
+$wakeLines    = $raw | Select-String "wake_lock|wakelock" | ForEach-Object { $_.Line.Trim() }
+$cpuLines     = $raw | Select-String "cpu="              | Select-Object -First 6 | ForEach-Object { $_.Line.Trim() }
+$powerLines   = $raw | Select-String "power|mah"         | Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }
+$networkLines = $raw | Select-String "network"           | Select-Object -First 4 | ForEach-Object { $_.Line.Trim() }
 
 Show-Section "GPS"       $gpsLines
 Show-Section "Wakelocks" $wakeLines
