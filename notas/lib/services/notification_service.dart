@@ -1,5 +1,6 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/note.dart';
 
 class NotificationService {
@@ -37,8 +38,18 @@ class NotificationService {
     );
   }
 
+  /// Request POST_NOTIFICATIONS permission (Android 13+).
   static Future<bool> requestPermissions() async {
     return AwesomeNotifications().requestPermissionToSendNotifications();
+  }
+
+  /// Request SCHEDULE_EXACT_ALARM permission (Android 12+).
+  /// Opens system settings if the permission hasn't been granted.
+  static Future<void> requestExactAlarmPermission() async {
+    final status = await Permission.scheduleExactAlarm.status;
+    if (status.isDenied || status.isRestricted) {
+      await Permission.scheduleExactAlarm.request();
+    }
   }
 
   static int _notifId(String noteId) => noteId.hashCode.abs() % 2147483647;
@@ -52,6 +63,15 @@ class NotificationService {
 
     await AwesomeNotifications().cancelSchedule(id);
 
+    final content = NotificationContent(
+      id: id,
+      channelKey: timeChannel,
+      title: note.title,
+      body: note.description.isNotEmpty ? note.description : 'Lembrete',
+      notificationLayout: NotificationLayout.Default,
+      wakeUpScreen: true,
+    );
+
     if (alert.isRecurring && alert.recurringType != null) {
       NotificationSchedule? schedule;
       switch (alert.recurringType) {
@@ -61,6 +81,7 @@ class NotificationService {
             minute: alert.dateTime.minute,
             second: 0,
             repeats: true,
+            allowWhileIdle: true,
           );
         case 'weekly':
           schedule = NotificationCalendar(
@@ -69,6 +90,7 @@ class NotificationService {
             minute: alert.dateTime.minute,
             second: 0,
             repeats: true,
+            allowWhileIdle: true,
           );
         case 'monthly':
           schedule = NotificationCalendar(
@@ -77,32 +99,23 @@ class NotificationService {
             minute: alert.dateTime.minute,
             second: 0,
             repeats: true,
+            allowWhileIdle: true,
           );
       }
       if (schedule != null) {
         await AwesomeNotifications().createNotification(
-          content: NotificationContent(
-            id: id,
-            channelKey: timeChannel,
-            title: note.title,
-            body: note.description.isNotEmpty ? note.description : 'Lembrete',
-            notificationLayout: NotificationLayout.Default,
-          ),
+          content: content,
           schedule: schedule,
         );
       }
     } else if (alert.dateTime.isAfter(DateTime.now())) {
       await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: id,
-          channelKey: timeChannel,
-          title: note.title,
-          body: note.description.isNotEmpty ? note.description : 'Lembrete',
-          notificationLayout: NotificationLayout.Default,
-        ),
+        content: content,
         schedule: NotificationCalendar.fromDate(
           date: alert.dateTime,
           repeats: false,
+          allowWhileIdle: true,
+          preciseAlarm: true,
         ),
       );
     }
@@ -118,6 +131,7 @@ class NotificationService {
             ? 'Chegou a: ${note.locationAlert!.locationName}'
             : 'Chegou ao local da nota',
         notificationLayout: NotificationLayout.Default,
+        wakeUpScreen: true,
       ),
     );
   }

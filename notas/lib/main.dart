@@ -27,7 +27,15 @@ class _NotasAppState extends State<NotasApp> {
   }
 
   Future<void> _bootstrap() async {
+    // Notification permissions (POST_NOTIFICATIONS on Android 13+)
     await NotificationService.requestPermissions();
+
+    // Exact alarm permission (SCHEDULE_EXACT_ALARM on Android 12+)
+    await NotificationService.requestExactAlarmPermission();
+
+    // Battery optimisation exemption – keeps the location foreground service
+    // alive when the screen turns off
+    await LocationService.instance.requestBatteryOptimizationExemption();
 
     final notes = HiveService.getAllNotes();
 

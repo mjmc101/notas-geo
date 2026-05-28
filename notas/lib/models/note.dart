@@ -83,6 +83,14 @@ class LocationAlert {
   @HiveField(7)
   int? timeWindowEndMinutes;
 
+  // Date restriction: start date (null = no restriction)
+  @HiveField(8)
+  DateTime? dateRangeStart;
+
+  // Date restriction end (null = single day when dateRangeStart != null)
+  @HiveField(9)
+  DateTime? dateRangeEnd;
+
   LocationAlert({
     required this.latitude,
     required this.longitude,
@@ -91,8 +99,14 @@ class LocationAlert {
     this.triggered = false,
     this.timeWindowStartMinutes,
     this.timeWindowEndMinutes,
+    this.dateRangeStart,
+    this.dateRangeEnd,
   });
 
   bool get hasTimeWindow =>
       timeWindowStartMinutes != null && timeWindowEndMinutes != null;
+
+  bool get hasDateRestriction => dateRangeStart != null;
+
+  bool get hasRestriction => hasTimeWindow || hasDateRestriction;
 }

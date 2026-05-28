@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'hive_service.dart';
 import 'notification_service.dart';
+import 'restriction_checker.dart';
 
 class LocationService {
   static LocationService? _instance;
@@ -23,6 +25,15 @@ class LocationService {
     }
     return perm != LocationPermission.denied &&
         perm != LocationPermission.deniedForever;
+  }
+
+  /// Requests the system to exempt this app from battery optimisation so the
+  /// foreground location service is not killed when the screen is off.
+  Future<void> requestBatteryOptimizationExemption() async {
+    final status = await Permission.ignoreBatteryOptimizations.status;
+    if (status.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
   }
 
   Future<void> startMonitoring() async {
@@ -71,28 +82,13 @@ class LocationService {
       if (dist <= loc.radiusMeters) {
         if (_triggered[note.id] == true) continue;
 
-        if (loc.hasTimeWindow) {
-          if (!_isInTimeWindow(
-              loc.timeWindowStartMinutes!, loc.timeWindowEndMinutes!, now)) {
-            continue;
-          }
-        }
+        if (!RestrictionChecker.isWithinRestriction(loc, now)) continue;
 
         _triggered[note.id] = true;
         NotificationService.sendLocationAlert(note);
       } else if (dist > loc.radiusMeters * 2.5) {
         _triggered.remove(note.id);
       }
-    }
-  }
-
-  bool _isInTimeWindow(int startMinutes, int endMinutes, DateTime now) {
-    final nowMinutes = now.hour * 60 + now.minute;
-    if (startMinutes <= endMinutes) {
-      return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-    } else {
-      // overnight range, e.g. 22:00–06:00
-      return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
     }
   }
 }

@@ -7,6 +7,9 @@ import '../services/location_service.dart';
 import '../theme.dart';
 import 'location_picker_screen.dart';
 
+// ── Restriction type chosen in the UI ────────────────────────────────────────
+enum _RestrictionType { timeRange, date, dateRange }
+
 class NoteFormScreen extends StatefulWidget {
   final Note? note;
   const NoteFormScreen({super.key, this.note});
@@ -21,19 +24,30 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   final _descCtrl = TextEditingController();
   final _locNameCtrl = TextEditingController();
 
+  // ── Time alert ──────────────────────────────────────────────────────────────
   bool _hasTimeAlert = false;
   DateTime? _alertDt;
   bool _isRecurring = false;
   String _recurringType = 'daily';
 
+  // ── Location alert ──────────────────────────────────────────────────────────
   bool _hasLocationAlert = false;
   double? _locLat;
   double? _locLng;
   double _locRadius = 200;
 
+  // ── Location restriction (combined) ─────────────────────────────────────────
   bool _hasCombined = false;
+  _RestrictionType _restrictionType = _RestrictionType.timeRange;
+
+  // Time-of-day window (used by timeRange, and optionally by date/dateRange)
   TimeOfDay? _combinedStartTime;
   TimeOfDay? _combinedEndTime;
+  bool _combinedHasTimeWindow = false; // only relevant for date/dateRange types
+
+  // Date restriction
+  DateTime? _combineDate;     // start date (or single date)
+  DateTime? _combineDateEnd;  // end date (dateRange only)
 
   @override
   void initState() {
@@ -59,19 +73,31 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
       _locRadius = loc.radiusMeters;
       _locNameCtrl.text = loc.locationName ?? '';
 
-      if (loc.hasTimeWindow) {
+      if (loc.hasRestriction) {
         _hasCombined = true;
-        _combinedStartTime = TimeOfDay(
-          hour: loc.timeWindowStartMinutes! ~/ 60,
-          minute: loc.timeWindowStartMinutes! % 60,
-        );
-        _combinedEndTime = TimeOfDay(
-          hour: loc.timeWindowEndMinutes! ~/ 60,
-          minute: loc.timeWindowEndMinutes! % 60,
-        );
+
+        if (loc.dateRangeStart != null) {
+          _combineDate = loc.dateRangeStart;
+          _combineDateEnd = loc.dateRangeEnd;
+          _restrictionType = loc.dateRangeEnd != null
+              ? _RestrictionType.dateRange
+              : _RestrictionType.date;
+          if (loc.hasTimeWindow) {
+            _combinedHasTimeWindow = true;
+            _combinedStartTime = _toTimeOfDay(loc.timeWindowStartMinutes!);
+            _combinedEndTime = _toTimeOfDay(loc.timeWindowEndMinutes!);
+          }
+        } else if (loc.hasTimeWindow) {
+          _restrictionType = _RestrictionType.timeRange;
+          _combinedStartTime = _toTimeOfDay(loc.timeWindowStartMinutes!);
+          _combinedEndTime = _toTimeOfDay(loc.timeWindowEndMinutes!);
+        }
       }
     }
   }
+
+  TimeOfDay _toTimeOfDay(int minutes) =>
+      TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
 
   @override
   void dispose() {
@@ -81,6 +107,8 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     super.dispose();
   }
 
+  // ── Pickers ──────────────────────────────────────────────────────────────────
+
   Future<void> _pickDateTime() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -88,67 +116,60 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
       initialDate: _alertDt ?? now.add(const Duration(hours: 1)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 3650)),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppTheme.accent,
-            surface: AppTheme.surface,
-            onSurface: AppTheme.textPrimary,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: _darkPicker,
     );
     if (date == null || !mounted) return;
-
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(_alertDt ?? now),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppTheme.accent,
-            surface: AppTheme.surface,
-            onSurface: AppTheme.textPrimary,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: _darkPicker,
     );
     if (time == null || !mounted) return;
-
-    setState(() {
-      _alertDt = DateTime(
-          date.year, date.month, date.day, time.hour, time.minute);
-    });
+    setState(() => _alertDt =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Future<void> _pickCombinedTime(bool isStart) async {
     final initial = isStart
         ? (_combinedStartTime ?? const TimeOfDay(hour: 9, minute: 0))
         : (_combinedEndTime ?? const TimeOfDay(hour: 18, minute: 0));
-
     final picked = await showTimePicker(
       context: context,
       initialTime: initial,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppTheme.accent,
-            surface: AppTheme.surface,
-            onSurface: AppTheme.textPrimary,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: _darkPicker,
     );
     if (picked == null || !mounted) return;
-
     setState(() {
       if (isStart) {
         _combinedStartTime = picked;
       } else {
         _combinedEndTime = picked;
+      }
+    });
+  }
+
+  Future<void> _pickCombineDate(bool isEnd) async {
+    final now = DateTime.now();
+    final initial = isEnd
+        ? (_combineDateEnd ?? (_combineDate ?? now))
+        : (_combineDate ?? now);
+    final firstDate = isEnd ? (_combineDate ?? now) : now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: now.add(const Duration(days: 3650)),
+      builder: _darkPicker,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isEnd) {
+        _combineDateEnd = picked;
+      } else {
+        _combineDate = picked;
+        if (_combineDateEnd != null && _combineDateEnd!.isBefore(picked)) {
+          _combineDateEnd = null;
+        }
       }
     });
   }
@@ -173,6 +194,19 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     }
   }
 
+  Widget _darkPicker(BuildContext ctx, Widget? child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppTheme.accent,
+            surface: AppTheme.surface,
+            onSurface: AppTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      );
+
+  // ── Save ─────────────────────────────────────────────────────────────────────
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -196,27 +230,64 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
         _showSnack('Escolha um ponto no mapa');
         return;
       }
-      int? startMinutes;
-      int? endMinutes;
+
+      int? startMin, endMin;
+      DateTime? dateStart, dateEnd;
+
       if (_hasCombined) {
-        if (_combinedStartTime == null || _combinedEndTime == null) {
-          _showSnack('Escolha as horas de início e fim do intervalo');
-          return;
+        switch (_restrictionType) {
+          case _RestrictionType.timeRange:
+            if (_combinedStartTime == null || _combinedEndTime == null) {
+              _showSnack('Escolha as horas de início e fim do intervalo');
+              return;
+            }
+            startMin = _toMinutes(_combinedStartTime!);
+            endMin = _toMinutes(_combinedEndTime!);
+
+          case _RestrictionType.date:
+            if (_combineDate == null) {
+              _showSnack('Escolha uma data');
+              return;
+            }
+            dateStart = _combineDate;
+            if (_combinedHasTimeWindow) {
+              if (_combinedStartTime == null || _combinedEndTime == null) {
+                _showSnack('Escolha as horas de início e fim');
+                return;
+              }
+              startMin = _toMinutes(_combinedStartTime!);
+              endMin = _toMinutes(_combinedEndTime!);
+            }
+
+          case _RestrictionType.dateRange:
+            if (_combineDate == null || _combineDateEnd == null) {
+              _showSnack('Escolha as datas de início e fim');
+              return;
+            }
+            dateStart = _combineDate;
+            dateEnd = _combineDateEnd;
+            if (_combinedHasTimeWindow) {
+              if (_combinedStartTime == null || _combinedEndTime == null) {
+                _showSnack('Escolha as horas de início e fim');
+                return;
+              }
+              startMin = _toMinutes(_combinedStartTime!);
+              endMin = _toMinutes(_combinedEndTime!);
+            }
         }
-        startMinutes =
-            _combinedStartTime!.hour * 60 + _combinedStartTime!.minute;
-        endMinutes = _combinedEndTime!.hour * 60 + _combinedEndTime!.minute;
       }
+
       locationAlert = LocationAlert(
         latitude: _locLat!,
         longitude: _locLng!,
         radiusMeters: _locRadius,
-        locationName: _locNameCtrl.text.trim().isEmpty
-            ? null
-            : _locNameCtrl.text.trim(),
+        locationName:
+            _locNameCtrl.text.trim().isEmpty ? null : _locNameCtrl.text.trim(),
         triggered: false,
-        timeWindowStartMinutes: startMinutes,
-        timeWindowEndMinutes: endMinutes,
+        timeWindowStartMinutes: startMin,
+        timeWindowEndMinutes: endMin,
+        dateRangeStart: dateStart,
+        dateRangeEnd: dateEnd,
       );
     }
 
@@ -244,10 +315,12 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
     if (mounted) Navigator.pop(context, true);
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
+  int _toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
+
+  void _showSnack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -269,8 +342,8 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
           children: [
             TextFormField(
               controller: _titleCtrl,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 17),
+              style:
+                  const TextStyle(color: AppTheme.textPrimary, fontSize: 17),
               decoration: const InputDecoration(
                 labelText: 'Título *',
                 prefixIcon: Icon(Icons.title, color: AppTheme.accent),
@@ -294,7 +367,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── Time Alert ──────────────────────────────────────
+            // ── Time Alert ────────────────────────────────────────────────
             _SectionToggle(
               icon: Icons.alarm,
               title: 'Aviso por Hora',
@@ -308,8 +381,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
                 isRecurring: _isRecurring,
                 recurringType: _recurringType,
                 onPickDt: _pickDateTime,
-                onToggleRecurring: (v) =>
-                    setState(() => _isRecurring = v),
+                onToggleRecurring: (v) => setState(() => _isRecurring = v),
                 onChangeRecurringType: (v) =>
                     setState(() => _recurringType = v!),
               ),
@@ -319,7 +391,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
             const Divider(color: AppTheme.cardBorder),
             const SizedBox(height: 16),
 
-            // ── Location Alert ───────────────────────────────────
+            // ── Location Alert ────────────────────────────────────────────
             _SectionToggle(
               icon: Icons.location_on,
               title: 'Aviso por Localização',
@@ -334,12 +406,31 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
                 locRadius: _locRadius,
                 locNameCtrl: _locNameCtrl,
                 hasCombined: _hasCombined,
+                restrictionType: _restrictionType,
                 combinedStartTime: _combinedStartTime,
                 combinedEndTime: _combinedEndTime,
+                combinedHasTimeWindow: _combinedHasTimeWindow,
+                combineDate: _combineDate,
+                combineDateEnd: _combineDateEnd,
                 onPickLocation: _pickLocation,
-                onToggleCombined: (v) => setState(() => _hasCombined = v),
+                onToggleCombined: (v) => setState(() {
+                  _hasCombined = v;
+                  if (!v) {
+                    _combineDate = null;
+                    _combineDateEnd = null;
+                    _combinedStartTime = null;
+                    _combinedEndTime = null;
+                    _combinedHasTimeWindow = false;
+                  }
+                }),
+                onChangeRestrictionType: (t) =>
+                    setState(() => _restrictionType = t),
                 onPickStartTime: () => _pickCombinedTime(true),
                 onPickEndTime: () => _pickCombinedTime(false),
+                onToggleTimeWindow: (v) =>
+                    setState(() => _combinedHasTimeWindow = v),
+                onPickDate: () => _pickCombineDate(false),
+                onPickDateEnd: () => _pickCombineDate(true),
               ),
             ],
 
@@ -351,7 +442,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   }
 }
 
-// ── Shared sub-widgets ────────────────────────────────────────────────────────
+// ── Sub-widgets ───────────────────────────────────────────────────────────────
 
 class _SectionToggle extends StatelessWidget {
   final IconData icon;
@@ -432,12 +523,20 @@ class _LocationAlertPanel extends StatelessWidget {
   final double locRadius;
   final TextEditingController locNameCtrl;
   final bool hasCombined;
+  final _RestrictionType restrictionType;
   final TimeOfDay? combinedStartTime;
   final TimeOfDay? combinedEndTime;
+  final bool combinedHasTimeWindow;
+  final DateTime? combineDate;
+  final DateTime? combineDateEnd;
   final VoidCallback onPickLocation;
   final ValueChanged<bool> onToggleCombined;
+  final ValueChanged<_RestrictionType> onChangeRestrictionType;
   final VoidCallback onPickStartTime;
   final VoidCallback onPickEndTime;
+  final ValueChanged<bool> onToggleTimeWindow;
+  final VoidCallback onPickDate;
+  final VoidCallback onPickDateEnd;
 
   const _LocationAlertPanel({
     required this.locLat,
@@ -445,22 +544,21 @@ class _LocationAlertPanel extends StatelessWidget {
     required this.locRadius,
     required this.locNameCtrl,
     required this.hasCombined,
+    required this.restrictionType,
     required this.combinedStartTime,
     required this.combinedEndTime,
+    required this.combinedHasTimeWindow,
+    required this.combineDate,
+    required this.combineDateEnd,
     required this.onPickLocation,
     required this.onToggleCombined,
+    required this.onChangeRestrictionType,
     required this.onPickStartTime,
     required this.onPickEndTime,
+    required this.onToggleTimeWindow,
+    required this.onPickDate,
+    required this.onPickDateEnd,
   });
-
-  String _fmt(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  bool get _isOvernight =>
-      combinedStartTime != null &&
-      combinedEndTime != null &&
-      (combinedStartTime!.hour * 60 + combinedStartTime!.minute) >
-          (combinedEndTime!.hour * 60 + combinedEndTime!.minute);
 
   @override
   Widget build(BuildContext context) {
@@ -481,9 +579,8 @@ class _LocationAlertPanel extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: locLat != null
-                    ? const Color(0x1AC8F060)
-                    : AppTheme.accent,
+                backgroundColor:
+                    locLat != null ? const Color(0x1AC8F060) : AppTheme.accent,
                 foregroundColor:
                     locLat != null ? AppTheme.accent : AppTheme.background,
                 side: locLat != null
@@ -499,86 +596,142 @@ class _LocationAlertPanel extends StatelessWidget {
           ),
           if (locLat != null) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0x1AC8F060),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle,
-                      color: AppTheme.accent, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${locLat!.toStringAsFixed(5)}, ${locLng!.toStringAsFixed(5)}'
-                      '\nRaio: ${locRadius.toInt()} m',
-                      style: const TextStyle(
-                          color: AppTheme.accent, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _LocationInfo(lat: locLat!, lng: locLng!, radius: locRadius),
             const SizedBox(height: 10),
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Combinar com intervalo de horas',
+              title: const Text('Combinar com hora / data',
                   style: TextStyle(color: AppTheme.textPrimary)),
               subtitle: const Text(
-                'Avisar só quando chega ao local dentro de um intervalo de horas',
-                style: TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 12),
+                'Avisar só dentro de um intervalo de horas ou datas',
+                style:
+                    TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
               value: hasCombined,
               onChanged: onToggleCombined,
             ),
             if (hasCombined) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _TimeButton(
-                      label: 'Início',
-                      time: combinedStartTime,
-                      onTap: onPickStartTime,
-                    ),
+              const SizedBox(height: 4),
+              // ── Restriction type selector ───────────────────────────────
+              SegmentedButton<_RestrictionType>(
+                style: SegmentedButton.styleFrom(
+                  backgroundColor: AppTheme.background,
+                  selectedBackgroundColor: const Color(0x1AC8F060),
+                  selectedForegroundColor: AppTheme.accent,
+                  foregroundColor: AppTheme.textSecondary,
+                  side: const BorderSide(color: AppTheme.cardBorder),
+                ),
+                segments: const [
+                  ButtonSegment(
+                    value: _RestrictionType.timeRange,
+                    label: Text('Horas'),
+                    icon: Icon(Icons.schedule, size: 16),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _TimeButton(
-                      label: 'Fim',
-                      time: combinedEndTime,
-                      onTap: onPickEndTime,
-                    ),
+                  ButtonSegment(
+                    value: _RestrictionType.date,
+                    label: Text('Data'),
+                    icon: Icon(Icons.today, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: _RestrictionType.dateRange,
+                    label: Text('Período'),
+                    icon: Icon(Icons.date_range, size: 16),
                   ),
                 ],
+                selected: {restrictionType},
+                onSelectionChanged: (s) => onChangeRestrictionType(s.first),
               ),
-              if (combinedStartTime != null && combinedEndTime != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AC8F060),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.schedule,
-                          color: AppTheme.accent, size: 15),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Avisar entre ${_fmt(combinedStartTime!)} e ${_fmt(combinedEndTime!)}${_isOvernight ? ' (passa meia-noite)' : ''}',
-                        style: const TextStyle(
-                            color: AppTheme.accent, fontSize: 12),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 12),
+
+              // ── Content per type ─────────────────────────────────────────
+              if (restrictionType == _RestrictionType.timeRange) ...[
+                _TimeRangePicker(
+                  startTime: combinedStartTime,
+                  endTime: combinedEndTime,
+                  onPickStart: onPickStartTime,
+                  onPickEnd: onPickEndTime,
                 ),
               ],
+
+              if (restrictionType == _RestrictionType.date) ...[
+                _DateButton(
+                  label: 'Data',
+                  date: combineDate,
+                  onTap: onPickDate,
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Também restringir por hora',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 14)),
+                  value: combinedHasTimeWindow,
+                  onChanged: onToggleTimeWindow,
+                ),
+                if (combinedHasTimeWindow) ...[
+                  const SizedBox(height: 6),
+                  _TimeRangePicker(
+                    startTime: combinedStartTime,
+                    endTime: combinedEndTime,
+                    onPickStart: onPickStartTime,
+                    onPickEnd: onPickEndTime,
+                  ),
+                ],
+              ],
+
+              if (restrictionType == _RestrictionType.dateRange) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DateButton(
+                        label: 'Início',
+                        date: combineDate,
+                        onTap: onPickDate,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _DateButton(
+                        label: 'Fim',
+                        date: combineDateEnd,
+                        onTap: onPickDateEnd,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Também restringir por hora',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 14)),
+                  value: combinedHasTimeWindow,
+                  onChanged: onToggleTimeWindow,
+                ),
+                if (combinedHasTimeWindow) ...[
+                  const SizedBox(height: 6),
+                  _TimeRangePicker(
+                    startTime: combinedStartTime,
+                    endTime: combinedEndTime,
+                    onPickStart: onPickStartTime,
+                    onPickEnd: onPickEndTime,
+                  ),
+                ],
+              ],
+
+              // ── Summary chip ─────────────────────────────────────────────
+              const SizedBox(height: 10),
+              _RestrictionSummary(
+                restrictionType: restrictionType,
+                startTime: combinedStartTime,
+                endTime: combinedEndTime,
+                combineDate: combineDate,
+                combineDateEnd: combineDateEnd,
+                hasTimeWindow: combinedHasTimeWindow,
+              ),
             ],
           ],
         ],
@@ -586,6 +739,8 @@ class _LocationAlertPanel extends StatelessWidget {
     );
   }
 }
+
+// ── Leaf widgets ──────────────────────────────────────────────────────────────
 
 class _Panel extends StatelessWidget {
   final Widget child;
@@ -605,6 +760,268 @@ class _Panel extends StatelessWidget {
   }
 }
 
+class _LocationInfo extends StatelessWidget {
+  final double lat, lng, radius;
+  const _LocationInfo(
+      {required this.lat, required this.lng, required this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0x1AC8F060),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: AppTheme.accent, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
+              '\nRaio: ${radius.toInt()} m',
+              style: const TextStyle(color: AppTheme.accent, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimeRangePicker extends StatelessWidget {
+  final TimeOfDay? startTime;
+  final TimeOfDay? endTime;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+
+  const _TimeRangePicker({
+    required this.startTime,
+    required this.endTime,
+    required this.onPickStart,
+    required this.onPickEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _TimeButton(
+              label: 'Início', time: startTime, onTap: onPickStart),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child:
+              _TimeButton(label: 'Fim', time: endTime, onTap: onPickEnd),
+        ),
+      ],
+    );
+  }
+}
+
+class _TimeButton extends StatelessWidget {
+  final String label;
+  final TimeOfDay? time;
+  final VoidCallback onTap;
+
+  const _TimeButton(
+      {required this.label, required this.time, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTime = time != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: hasTime ? AppTheme.accent : AppTheme.cardBorder),
+          color: hasTime ? const Color(0x1AC8F060) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.access_time,
+                    color:
+                        hasTime ? AppTheme.accent : AppTheme.textSecondary,
+                    size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  hasTime
+                      ? '${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}'
+                      : '--:--',
+                  style: TextStyle(
+                    color: hasTime
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateButton extends StatelessWidget {
+  final String label;
+  final DateTime? date;
+  final VoidCallback onTap;
+
+  const _DateButton(
+      {required this.label, required this.date, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDate = date != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: hasDate ? AppTheme.accent : AppTheme.cardBorder),
+          color: hasDate ? const Color(0x1AC8F060) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.calendar_today,
+                    color:
+                        hasDate ? AppTheme.accent : AppTheme.textSecondary,
+                    size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  hasDate
+                      ? DateFormat('dd/MM/yyyy').format(date!)
+                      : '-- / -- / ----',
+                  style: TextStyle(
+                    color: hasDate
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RestrictionSummary extends StatelessWidget {
+  final _RestrictionType restrictionType;
+  final TimeOfDay? startTime;
+  final TimeOfDay? endTime;
+  final DateTime? combineDate;
+  final DateTime? combineDateEnd;
+  final bool hasTimeWindow;
+
+  const _RestrictionSummary({
+    required this.restrictionType,
+    required this.startTime,
+    required this.endTime,
+    required this.combineDate,
+    required this.combineDateEnd,
+    required this.hasTimeWindow,
+  });
+
+  String _fmtTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  String _fmtDate(DateTime d) => DateFormat('dd/MM/yyyy').format(d);
+
+  bool get _overnight =>
+      startTime != null &&
+      endTime != null &&
+      (startTime!.hour * 60 + startTime!.minute) >
+          (endTime!.hour * 60 + endTime!.minute);
+
+  @override
+  Widget build(BuildContext context) {
+    String? summary;
+
+    switch (restrictionType) {
+      case _RestrictionType.timeRange:
+        if (startTime != null && endTime != null) {
+          summary =
+              'Avisar entre ${_fmtTime(startTime!)} e ${_fmtTime(endTime!)}${_overnight ? ' (passa meia-noite)' : ''}';
+        }
+      case _RestrictionType.date:
+        if (combineDate != null) {
+          final timePart = hasTimeWindow &&
+                  startTime != null &&
+                  endTime != null
+              ? ', entre ${_fmtTime(startTime!)} e ${_fmtTime(endTime!)}'
+              : '';
+          summary = 'Avisar em ${_fmtDate(combineDate!)}$timePart';
+        }
+      case _RestrictionType.dateRange:
+        if (combineDate != null && combineDateEnd != null) {
+          final timePart = hasTimeWindow &&
+                  startTime != null &&
+                  endTime != null
+              ? ', entre ${_fmtTime(startTime!)} e ${_fmtTime(endTime!)}'
+              : '';
+          summary =
+              'Avisar de ${_fmtDate(combineDate!)} a ${_fmtDate(combineDateEnd!)}$timePart';
+        }
+    }
+
+    if (summary == null) return const SizedBox.shrink();
+
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0x1AC8F060),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline,
+              color: AppTheme.accent, size: 15),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              summary,
+              style: const TextStyle(
+                  color: AppTheme.accent, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecurringDropdown extends StatelessWidget {
   final String value;
   final ValueChanged<String?> onChanged;
@@ -620,7 +1037,8 @@ class _RecurringDropdown extends StatelessWidget {
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: const InputDecoration(
         labelText: 'Frequência',
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
       items: const [
         DropdownMenuItem(value: 'daily', child: Text('Diário')),
@@ -659,68 +1077,10 @@ class _DateTimeButton extends StatelessWidget {
                   ? DateFormat('dd/MM/yyyy HH:mm').format(dt!)
                   : 'Escolher data e hora',
               style: TextStyle(
-                color:
-                    dt != null ? AppTheme.textPrimary : AppTheme.textSecondary,
+                color: dt != null
+                    ? AppTheme.textPrimary
+                    : AppTheme.textSecondary,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TimeButton extends StatelessWidget {
-  final String label;
-  final TimeOfDay? time;
-  final VoidCallback onTap;
-
-  const _TimeButton({
-    required this.label,
-    required this.time,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasTime = time != null;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: hasTime ? AppTheme.accent : AppTheme.cardBorder),
-          color: hasTime ? const Color(0x1AC8F060) : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 11)),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.access_time,
-                    color: hasTime ? AppTheme.accent : AppTheme.textSecondary,
-                    size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  hasTime
-                      ? '${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}'
-                      : '--:--',
-                  style: TextStyle(
-                    color: hasTime
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
