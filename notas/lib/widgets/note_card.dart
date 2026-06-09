@@ -10,6 +10,7 @@ class NoteCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onArchive;
+  final VoidCallback? onUnarchive;
 
   const NoteCard({
     super.key,
@@ -18,6 +19,7 @@ class NoteCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onArchive,
+    this.onUnarchive,
   });
 
   @override
@@ -82,6 +84,15 @@ class NoteCard extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
+                  if (onUnarchive != null)
+                    IconButton(
+                      icon: const Icon(Icons.unarchive_outlined,
+                          color: AppTheme.accent, size: 20),
+                      tooltip: 'Desarquivar',
+                      onPressed: onUnarchive,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert,
                         color: AppTheme.textSecondary, size: 20),
@@ -107,6 +118,17 @@ class NoteCard extends StatelessWidget {
                                 style: TextStyle(color: AppTheme.textPrimary)),
                           ]),
                         ),
+                      if (onUnarchive != null)
+                        const PopupMenuItem(
+                          value: 'unarchive',
+                          child: Row(children: [
+                            Icon(Icons.unarchive_outlined,
+                                color: AppTheme.accent, size: 18),
+                            SizedBox(width: 8),
+                            Text('Desarquivar',
+                                style: TextStyle(color: AppTheme.textPrimary)),
+                          ]),
+                        ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(children: [
@@ -120,6 +142,7 @@ class NoteCard extends StatelessWidget {
                     onSelected: (v) {
                       if (v == 'edit') onEdit();
                       if (v == 'archive') onArchive?.call();
+                      if (v == 'unarchive') onUnarchive?.call();
                       if (v == 'delete') onDelete();
                     },
                   ),
