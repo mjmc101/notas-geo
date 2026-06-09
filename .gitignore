@@ -1,0 +1,6 @@
+# IntelliJ / Android Studio (repo root)
+.idea/
+
+# Local debug dumps produced by tools/battery_test.ps1
+battery_dump_*.txt
+**/battery_dump_*.txt
